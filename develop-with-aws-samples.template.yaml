@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Provisions sample resources for Develop with AWS.'
+Metadata: {}
+Parameters: {}
+Mappings: {}
+Conditions: {}
+Resources:
+  DawsDemoRepo:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      # KLUDGE: Oddly RepositoryName is required, even though it prevents ephemeral resources per stack, hence the custom naming.
+      RepositoryName: !Sub 
+        - 'DawsDemoRepo-${UniqueId}'
+        - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+      RepositoryDescription: This is a demo repository to explore Develop with AWS features.
+      Code:
+        BranchName: main
+        S3: 
+          Bucket: code.eu-central-1.utoolity.net
+          Key: aws/cloudformation/code/develop-with-aws-samples-main.zip
+          # ObjectVersion: 1
+Outputs: {}
