@@ -79,6 +79,7 @@ Resources:
           - !GetAtt DevelopWithAwsDemoRepository.Arn
       Roles: [!Ref DevelopWithAwsDemoCodeBuildServiceRole]
   DevelopWithAwsDemoBuildProject:
+    DependsOn: DevelopWithAwsDemoCodeBuildServiceRoleManagedPolicy
     Type: AWS::CodeBuild::Project
     Properties:
       Description: A demo project to explore Develop with AWS features.
@@ -295,8 +296,9 @@ Resources:
           Effect: Allow
       Roles: [!Ref DevelopWithAwsDemoCodePipelineServiceRole]
   DevelopWithAwsDemoPipeline: 
-    Type: AWS::CodePipeline::Pipeline 
-    Properties: 
+    DependsOn: DevelopWithAwsDemoCodePipelineServiceRoleManagedPolicy
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
       RoleArn:
         !GetAtt DevelopWithAwsDemoCodePipelineServiceRole.Arn
       Stages: 
