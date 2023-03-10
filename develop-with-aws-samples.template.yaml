@@ -35,13 +35,106 @@ Resources:
       RepositoryName: !Sub 
         - 'develop-with-aws-demo-${UniqueId}'
         - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
-      RepositoryDescription: This is a demo repository to explore Develop with AWS features.
+      RepositoryDescription: A demo repository to explore Develop with AWS features.
       Code:
         BranchName: main
         S3: 
           Bucket: code.eu-central-1.utoolity.net
           Key: aws/cloudformation/code/develop-with-aws-samples-main.zip
           # ObjectVersion: 1
+  DevelopWithAwsDemoCodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [codebuild.amazonaws.com]
+          Action: sts:AssumeRole
+      Path: /
+  DevelopWithAwsDemoCodeBuildServiceRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      # KLUDGE: Oddly PolicyName is required, even though it prevents ephemeral resources per stack, hence the custom naming.
+      PolicyName: !Sub 
+        - 'develop-with-aws-demo-project-${UniqueId}'
+        - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+      PolicyDocument: # TODO: Scope this default service role policy down to actually used resources and actions!
+        Statement:
+        - Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Effect: Allow
+          Resource: '*'
+        - Action:
+          - s3:GetObject
+          - s3:GetObjectVersion
+          - s3:PutObject
+          Effect: Allow
+          Resource:
+          - !Sub ${DevelopWithAwsDemoBucket.Arn}/*
+        - Action:
+          - codecommit:GitPull
+          Effect: Allow
+          Resource:
+          - !GetAtt DevelopWithAwsDemoRepository.Arn
+      Roles: [!Ref DevelopWithAwsDemoCodeBuildServiceRole]
+  DevelopWithAwsDemoBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Description: A demo project to explore Develop with AWS features.
+      ServiceRole: !GetAtt DevelopWithAwsDemoCodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+      LogsConfig:
+        CloudWatchLogs:
+            GroupName: !Sub
+              - "/aws/vendedlogs/states/DevelopWithAwsDemoBuildProjectLogGroup-${UniqueId}"
+              - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+            Status: ENABLED
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                - echo Installing something...
+              finally:
+                - echo This always runs even if the install command fails 
+            pre_build:
+              commands:
+                - echo Preprocessing build...
+                - mkdir target
+              finally:
+                - echo This always runs even if the pre_build command fails 
+            build:
+              commands:
+                - echo Building something...
+                - echo Build started on `date`
+                - echo Build started on `date` >target/artifact.txt
+              finally:
+                - echo This always runs even if the build command fails
+            post_build:
+              commands:
+                - echo Postprocessing build...
+                - echo Build completed on `date`
+                - echo Build completed on `date` >>target/artifact.txt
+          artifacts:
+            files:
+              - target/artifact.txt
+            discard-paths: yes
+      TimeoutInMinutes: 8
+      Tags:
+        - Key: utoolity:atlassian:devops:environment:type
+          Value: development
+        - Key: utoolity:atlassian:devops:provider:type
+          Value: build
   DevelopWithAwsDemoEventsServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -125,15 +218,17 @@ Resources:
         #   ]
         #   Resource: "*"
         #   Effect: Allow
-        - Action: "s3:*"
-        # - Action: [
-        #     "s3:GetObject",
-        #     "s3:GetObjectVersion",
-        #     "s3:GetBucketVersioning",
-        #     "s3:PutObject"
-        #   ]
-          # Resource: !GetAtt DevelopWithAwsDemoBucket.Arn
-          Resource: "*"
+        - Action: [
+            "s3:GetObject",
+            "s3:GetObjectVersion",
+            "s3:PutObject"
+          ]
+          Resource: !Sub ${DevelopWithAwsDemoBucket.Arn}/*
+          Effect: Allow
+        - Action: [
+            "s3:GetBucketVersioning",
+          ]
+          Resource: !Sub ${DevelopWithAwsDemoBucket.Arn}
           Effect: Allow
         - Action: [  # TODO: scope down to actually used resources and actions!
             "cloudformation:CreateStack",
@@ -209,33 +304,43 @@ Resources:
       RoleArn:
         !GetAtt DevelopWithAwsDemoCodePipelineServiceRole.Arn
       Stages: 
-        - 
-          Name: Source 
+        - Name: Source 
           Actions: 
-            - 
-              Name: SourceAction
+            - Name: CheckoutCode
               ActionTypeId: 
                 Category: Source 
                 Owner: AWS 
                 Provider: CodeCommit 
                 Version: '1'
               OutputArtifacts: 
-                - 
-                  Name: SourceArtifact 
+                - Name: SourceArtifact 
               Configuration: 
                 RepositoryName: 
                   !GetAtt 'DevelopWithAwsDemoRepository.Name'
                 BranchName: 'main'
                 PollForSourceChanges: false
               RunOrder: 1
-        - 
-          Name: Deploy
+        - Name: Build
+          Actions: 
+            - Name: BuildArtifact
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              RunOrder: 1
+              Configuration:
+                ProjectName: !Ref DevelopWithAwsDemoBuildProject
+                PrimarySource: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              InputArtifacts:
+                - Name: SourceArtifact
+        - Name: Deploy
           Actions:
-            - 
-              Name: DeployAction
             - !If
               - IncludeApproval
-              - Name: ApprovalAction
+              - Name: ApproveDeployment
                 ActionTypeId: 
                   Category: Approval 
                   Owner: AWS 
@@ -243,9 +348,7 @@ Resources:
                   Version: '1'
                 RunOrder: 1
               - !Ref AWS::NoValue 
-              InputArtifacts: 
-                - 
-                  Name: SourceArtifact 
+            - Name: DeployArtifact 
               ActionTypeId: 
                 Category: Deploy 
                 Owner: AWS 
@@ -255,6 +358,8 @@ Resources:
                 BucketName: 
                   Ref: DevelopWithAwsDemoBucket
                 Extract: true
+              InputArtifacts:
+                - Name: BuildArtifact
               RunOrder: 2
       ArtifactStore: 
         Type: S3 
