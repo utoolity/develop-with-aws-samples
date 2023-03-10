@@ -52,14 +52,12 @@ Resources:
             Service: [codebuild.amazonaws.com]
           Action: sts:AssumeRole
       Path: /
-  DevelopWithAwsDemoCodeBuildServiceRolePolicy:
-    Type: AWS::IAM::Policy
+  DevelopWithAwsDemoCodeBuildServiceRoleManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      # KLUDGE: Oddly PolicyName is required, even though it prevents ephemeral resources per stack, hence the custom naming.
-      PolicyName: !Sub 
-        - 'develop-with-aws-demo-project-${UniqueId}'
-        - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+      Description: Grants permissions to explore CodeBuild related Develop with AWS features.
       PolicyDocument: # TODO: Scope this default service role policy down to actually used resources and actions!
+        Version: "2012-10-17"
         Statement:
         - Action:
           - logs:CreateLogGroup
@@ -191,14 +189,12 @@ Resources:
             Service: [codepipeline.amazonaws.com]
           Action: sts:AssumeRole
       Path: /
-  DevelopWithAwsDemoCodePipelineServiceRolePolicy:
-    Type: AWS::IAM::Policy
+  DevelopWithAwsDemoCodePipelineServiceRoleManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      # KLUDGE: Oddly PolicyName is required, even though it prevents ephemeral resources per stack, hence the custom naming.
-      PolicyName: !Sub 
-        - 'develop-with-aws-demo-pipeline-${UniqueId}'
-        - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+      Description: Grants permissions to explore CodePipeline related Develop with AWS features.
       PolicyDocument: # TODO: Scope this default service role policy down to actually used resources and actions!
+        Version: "2012-10-17"
         Statement:
         - Action: [
             "iam:PassRole"
