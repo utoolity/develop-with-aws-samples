@@ -131,7 +131,7 @@ Resources:
       TimeoutInMinutes: 8
       Tags:
         - Key: utoolity:atlassian:devops:environment:type
-          Value: development
+          Value: production
         - Key: utoolity:atlassian:devops:provider:type
           Value: build
   DevelopWithAwsDemoEventsServiceRole:
@@ -365,5 +365,5 @@ Resources:
           Ref: DevelopWithAwsDemoBucket 
       Tags:
         - Key: utoolity:atlassian:devops:environment:type
-          Value: development
+          Value: production
 Outputs: {}
