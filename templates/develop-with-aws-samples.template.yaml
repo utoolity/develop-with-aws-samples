@@ -24,7 +24,7 @@ Conditions:
     - Include
 Mappings: {}
 Resources:
-  DevelopWithAwsDemoBucket:
+  DevelopWithAwsDemoBucket: # TODO: The bucket should ideally be deleted due to just being a sample, but emptying is not natively supported of course.
     Type: 'AWS::S3::Bucket'
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
@@ -295,6 +295,29 @@ Resources:
           Resource: "*"
           Effect: Allow
       Roles: [!Ref DevelopWithAwsDemoCodePipelineServiceRole]
+  DevelopWithAwsDemoCloudFormationServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [cloudformation.amazonaws.com]
+          Action: sts:AssumeRole
+      Path: /
+  DevelopWithAwsDemoCloudFormationServiceRoleManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Grants permissions to explore CloudFormation related Develop with AWS features.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: [
+            "cloudformation:ValidateTemplate" # NOTE: Dummy entry for initial skeleton policy
+          ]
+          Resource: "*"
+          Effect: Allow
+      Roles: [!Ref DevelopWithAwsDemoCloudFormationServiceRole]
   DevelopWithAwsDemoPipeline: 
     DependsOn: DevelopWithAwsDemoCodePipelineServiceRoleManagedPolicy
     Type: AWS::CodePipeline::Pipeline
@@ -358,6 +381,23 @@ Resources:
                 Extract: true
               InputArtifacts:
                 - Name: BuildArtifact
+              RunOrder: 2
+            - Name: DeployStack 
+              ActionTypeId: 
+                Category: Deploy 
+                Owner: AWS 
+                Provider: CloudFormation 
+                Version: '1'
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt DevelopWithAwsDemoCloudFormationServiceRole.Arn
+                StackName: !Sub 
+                  - 'develop-with-aws-demo-${UniqueId}'
+                  - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+                TemplateConfiguration: 'SourceArtifact::templates/cloudformation-skeleton.template-configuration.json'
+                TemplatePath: 'SourceArtifact::templates/cloudformation-skeleton.template.yaml'
+              InputArtifacts:
+                - Name: SourceArtifact
               RunOrder: 2
       ArtifactStore: 
         Type: S3 

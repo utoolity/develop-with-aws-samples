@@ -1,0 +1,10 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Provisions a bare CloudFormation stack skeleton for bootstrapping purposes.'
+Metadata: {}
+Parameters: {}
+Mappings: {}
+Conditions: {}
+Resources:
+  DummyHandle:
+    Type: "AWS::CloudFormation::WaitConditionHandle"
+Outputs: {}
