@@ -6,21 +6,34 @@ Metadata:
     - Label:
         default: CodePipeline configuration
       Parameters:
-      - IncludeApproval
+      - ApproveDeployment
+      - IncludeCloudFormation
     ParameterLabels:
-      IncludeApproval:
-        default: Include manual approval action
+      ApproveDeployment:
+        default: Approve deployment
+      IncludeCloudFormation:
+        default: Include CloudFormation
 Parameters:
-  IncludeApproval:
+  ApproveDeployment:
     Type: String
-    Description: Choose Include to add a manual approval action for continous delivery, or Skip to continuously deploy.
+    Description: Choose Approve to add a manual approval action for continous delivery, or Skip to continuously deploy.
+    AllowedValues:
+      - Approve
+      - Skip
+    Default: Skip
+  IncludeCloudFormation:
+    Type: String
+    Description: Choose Include to add a CloudFormation sample that creates and deletes a stack. If you do not approve deletion, make sure to delete the stack *before* you delete the pipeline.
     AllowedValues:
       - Include
       - Skip
     Default: Skip
 Conditions:
-  IncludeApproval: !Equals 
-    - !Ref IncludeApproval
+  ApproveDeployment: !Equals 
+    - !Ref ApproveDeployment
+    - Approve
+  IncludeCloudFormation: !Equals 
+    - !Ref IncludeCloudFormation
     - Include
 Mappings: {}
 Resources:
@@ -296,6 +309,7 @@ Resources:
           Effect: Allow
       Roles: [!Ref DevelopWithAwsDemoCodePipelineServiceRole]
   DevelopWithAwsDemoCloudFormationServiceRole:
+    Condition: IncludeCloudFormation
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -306,6 +320,7 @@ Resources:
           Action: sts:AssumeRole
       Path: /
   DevelopWithAwsDemoCloudFormationServiceRoleManagedPolicy:
+    Condition: IncludeCloudFormation
     Type: AWS::IAM::ManagedPolicy
     Properties:
       Description: Grants permissions to explore CloudFormation related Develop with AWS features.
@@ -360,7 +375,7 @@ Resources:
         - Name: Deploy
           Actions:
             - !If
-              - IncludeApproval
+              - ApproveDeployment
               - Name: ApproveDeployment
                 ActionTypeId: 
                   Category: Approval 
@@ -382,23 +397,53 @@ Resources:
               InputArtifacts:
                 - Name: BuildArtifact
               RunOrder: 2
-            - Name: DeployStack 
-              ActionTypeId: 
-                Category: Deploy 
-                Owner: AWS 
-                Provider: CloudFormation 
-                Version: '1'
-              Configuration:
-                ActionMode: CREATE_UPDATE
-                RoleArn: !GetAtt DevelopWithAwsDemoCloudFormationServiceRole.Arn
-                StackName: !Sub 
-                  - 'develop-with-aws-demo-${UniqueId}'
-                  - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
-                TemplateConfiguration: 'SourceArtifact::templates/cloudformation-skeleton.template-configuration.json'
-                TemplatePath: 'SourceArtifact::templates/cloudformation-skeleton.template.yaml'
-              InputArtifacts:
-                - Name: SourceArtifact
-              RunOrder: 2
+            - !If
+              - IncludeCloudFormation
+              - Name: CreateOrUpdateStack 
+                ActionTypeId: 
+                  Category: Deploy 
+                  Owner: AWS 
+                  Provider: CloudFormation 
+                  Version: '1'
+                Configuration:
+                  ActionMode: CREATE_UPDATE
+                  RoleArn: !GetAtt DevelopWithAwsDemoCloudFormationServiceRole.Arn
+                  StackName: !Sub 
+                    - 'develop-with-aws-demo-${UniqueId}'
+                    - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+                  TemplateConfiguration: 'SourceArtifact::templates/cloudformation-skeleton.template-configuration.json'
+                  TemplatePath: 'SourceArtifact::templates/cloudformation-skeleton.template.yaml'
+                InputArtifacts:
+                  - Name: SourceArtifact
+                RunOrder: 2
+              - !Ref AWS::NoValue 
+        - !If
+          - IncludeCloudFormation
+          - Name: Teardown
+            Actions:
+              - Name: ApproveTeardown
+                ActionTypeId: 
+                  Category: Approval 
+                  Owner: AWS 
+                  Provider: Manual 
+                  Version: '1'
+                RunOrder: 1
+              - Name: DeleteStack 
+                ActionTypeId: 
+                  Category: Deploy 
+                  Owner: AWS 
+                  Provider: CloudFormation 
+                  Version: '1'
+                Configuration:
+                  ActionMode: DELETE_ONLY
+                  RoleArn: !GetAtt DevelopWithAwsDemoCloudFormationServiceRole.Arn
+                  StackName: !Sub 
+                    - 'develop-with-aws-demo-${UniqueId}'
+                    - UniqueId: !Select [2, !Split ['/', !Ref AWS::StackId]]
+                InputArtifacts:
+                  - Name: SourceArtifact
+                RunOrder: 2
+          - !Ref AWS::NoValue 
       ArtifactStore: 
         Type: S3 
         Location:
